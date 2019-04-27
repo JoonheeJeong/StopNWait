@@ -86,12 +86,14 @@ public class ChatAppLayer implements BaseLayer {
 			return true;
 		}
 		
-		// Buffer check, Insert fragment into buffer
+		// Buffer check
 		if (this.m_ChatApp.data == null) {
 			this.m_ChatApp.capp_totlen[0] = input[0];
 			this.m_ChatApp.capp_totlen[1] = input[1];
 			this.m_ChatApp.data = new byte[128 * this.m_ChatApp.capp_totlen[1] + this.m_ChatApp.capp_totlen[0]];
 		}
+		
+		// Insert fragment into buffer
 		byte[] fragment = removeHeader(input, input.length);
 		this.m_ChatApp.capp_type = input[2];
 		insertIntoBuffer(fragment);

@@ -28,7 +28,7 @@ public class EthernetLayer implements BaseLayer {
 		byte[] enet_type;
 		//byte[] enet_data;
 		
-		//Data type: 0x2016, ACK type: 0x0102
+		//Data type: 0x2016, ACK type: 0x1004
 		public _ETHERNET_FRAME() {
 			this.enet_dstaddr = new _ETHERNET_ADDR();
 			this.enet_srcaddr = new _ETHERNET_ADDR();
@@ -39,7 +39,7 @@ public class EthernetLayer implements BaseLayer {
 		}
 	}
 	
-	private enum Type{
+	private enum TransmissionType{
 		DATA,
 		ACK,
 		NONE; 
@@ -49,12 +49,17 @@ public class EthernetLayer implements BaseLayer {
 		pLayerName = pName;
 	}
 	
-	public byte[] ObjToByte(byte[] input, int length) {
+	public byte[] addHeader(byte[] input, int length) {
 		byte[] buf = new byte[length+14];
 		
 		System.arraycopy(this.m_Frame.enet_dstaddr.addr, 0, buf, 0, 6);
 		System.arraycopy(this.m_Frame.enet_srcaddr.addr, 0, buf, 6, 6);
-		System.arraycopy(this.m_Frame.enet_type, 0, buf, 12, 2);
+		if (length == 4 && input[2] == (byte) 0x00) { // ACK
+			buf[12] = 0x10;
+			buf[13] = 0x04;
+		} else { // DATA
+			System.arraycopy(this.m_Frame.enet_type, 0, buf, 12, 2);
+		}
 		System.arraycopy(input, 0, buf, 14, length);
 
 		return buf;
@@ -62,13 +67,12 @@ public class EthernetLayer implements BaseLayer {
 	
 	public boolean Send(byte[] input, int length) {
 		System.out.println("send_ethernet");
-		byte[] data = ObjToByte(input, length);
-		//this.m_Frame.enet_data = data;
+		byte[] data = addHeader(input, length);
 		GetUnderLayer().Send(data, length+14);
 		return true;
 	}
 	
-	public byte[] RemoveHeader(byte[] input, int length) {
+	public byte[] removeHeader(byte[] input, int length) {
 		byte[] data = new byte[length-14];
 		System.arraycopy(input, 14, data, 0, length-14);
 		return data;
@@ -79,10 +83,10 @@ public class EthernetLayer implements BaseLayer {
 		if ( !(isBroadCast(input) || isCorrespondingAddress(input)) ) {
 			return false;
 		}
-		Type type = getType(input);
-		switch (type) {
+		TransmissionType transmissionType = getTransmissionType(input);
+		switch (transmissionType) {
 		case DATA:
-			byte[] data = RemoveHeader(input, input.length);
+			byte[] data = removeHeader(input, input.length);
 			this.GetUpperLayer(0).Receive(data);
 			return true;
 		case ACK:
@@ -126,13 +130,13 @@ public class EthernetLayer implements BaseLayer {
 		return true;
 	}
 	
-	private Type getType(byte[] input) {
+	private TransmissionType getTransmissionType(byte[] input) {
 		if (input[12] == 0x20 && input[13] == 0x16)
-			return Type.DATA;
-		else if (input[12] == 0x01 && input[13] == 0x02)
-			return Type.ACK;
+			return TransmissionType.DATA;
+		else if (input[12] == 0x10 && input[13] == 0x04)
+			return TransmissionType.ACK;
 		else
-			return Type.NONE;
+			return TransmissionType.NONE;
 	}
 	
 	public void setSrcAddr(byte[] srcAddr) {
