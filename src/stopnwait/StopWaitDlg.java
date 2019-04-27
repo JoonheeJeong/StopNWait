@@ -229,8 +229,10 @@ public class StopWaitDlg extends JFrame implements BaseLayer {
 					JOptionPane.showMessageDialog(null, "You must set mac address first.\n");
 					return;
 				}
-				System.out.println("send_dlg");
 				String sendingText = ChattingWrite.getText();
+				if (sendingText.equals(""))
+					return;
+				System.out.println("send_dlg");
 				ChattingWrite.setText("");
 				ChattingArea.append("[SEND]:" + sendingText + "\n");
 				byte[] data = sendingText.getBytes();

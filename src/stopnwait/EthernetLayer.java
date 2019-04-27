@@ -29,6 +29,7 @@ public class EthernetLayer implements BaseLayer {
 		byte[] enet_type;
 		//byte[] enet_data;
 		
+		//Data type: 0x2016, ACK type: 0x0102
 		public _ETHERNET_FRAME() {
 			this.enet_dstaddr = new _ETHERNET_ADDR();
 			this.enet_srcaddr = new _ETHERNET_ADDR();
@@ -37,6 +38,12 @@ public class EthernetLayer implements BaseLayer {
 			this.enet_type[1] = 0x16;
 			//this.enet_data = null;
 		}
+	}
+	
+	private enum Type{
+		DATA,
+		ACK,
+		NONE; 
 	}
 	
 	
@@ -71,12 +78,22 @@ public class EthernetLayer implements BaseLayer {
 
 	public synchronized boolean Receive(byte[] input) {
 		System.out.println("Receive_ethernet");
-		if (isMyType(input) && ((isBroadCast(input) && isFromMyDst(input)) || isCorresponding(input))) {
+		if ( !(isBroadCast(input) || isCorrespondingAddress(input)) ) {
+			return false;
+		}
+		Type type = getType(input);
+		switch (type) {
+		case DATA:
 			byte[] data = RemoveHeader(input, input.length);
 			this.GetUpperLayer(0).Receive(data);
 			return true;
+		case ACK:
+			this.GetUpperLayer(0).Send(new byte[0], 0);
+			return true;
+		case NONE:
+		default:
+			return false;
 		}
-		return false;
 	}
 	
 	private boolean isBroadCast(byte[] input) {
@@ -87,7 +104,7 @@ public class EthernetLayer implements BaseLayer {
 		return true;
 	}
 	
-	private boolean isCorresponding(byte[] input) {
+	private boolean isCorrespondingAddress(byte[] input) {
 		if (isToMySrc(input) && isFromMyDst(input))
 			return true;
 		return false;
@@ -111,12 +128,13 @@ public class EthernetLayer implements BaseLayer {
 		return true;
 	}
 	
-	private boolean isMyType(byte[] input) {
-		if (input[12] != 0x20)
-			return false;
-		if (input[13] != 0x16)
-			return false;
-		return true;
+	private Type getType(byte[] input) {
+		if (input[12] == 0x20 && input[13] == 0x16)
+			return Type.DATA;
+		else if (input[12] == 0x01 && input[13] == 0x02)
+			return Type.ACK;
+		else
+			return Type.NONE;
 	}
 	
 	public void setSrcAddr(byte[] srcAddr) {
