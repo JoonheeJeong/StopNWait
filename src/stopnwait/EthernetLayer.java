@@ -1,6 +1,5 @@
 package stopnwait;
 
-
 import java.util.ArrayList;
 
 public class EthernetLayer implements BaseLayer {
@@ -45,7 +44,6 @@ public class EthernetLayer implements BaseLayer {
 		ACK,
 		NONE; 
 	}
-	
 	
 	public EthernetLayer(String pName) {
 		pLayerName = pName;

@@ -1,6 +1,5 @@
 package stopnwait;
 
-
 import java.util.ArrayList;
 
 public class ChatAppLayer implements BaseLayer {
@@ -14,13 +13,13 @@ public class ChatAppLayer implements BaseLayer {
 		byte[] capp_totlen;
 		byte capp_type;
 		byte capp_unused;
-	//	byte[] data;
+		byte[] data;
 
 		public _CHAT_APP() {
 			this.capp_totlen = new byte[2];
 			this.capp_type = 0x00;
 			this.capp_unused = 0x00;
-		//	this.data = null;
+			this.data = null;
 		}
 	}
 	
@@ -29,12 +28,12 @@ public class ChatAppLayer implements BaseLayer {
 		pLayerName = pName;
 	}
 
-	public byte[] ObjToByte(byte type, byte[] input, int length) {
+	public byte[] addHeader(byte type, byte[] input, int length) {
 		byte[] buf = new byte[length+4];
 		
-		buf[0] = this.m_ChatApp.capp_totlen[0];
-		buf[1] = this.m_ChatApp.capp_totlen[1];
-		buf[2] = this.m_ChatApp.capp_type;
+		buf[0] = (byte) (length % 128);
+		buf[1] = (byte) (length / 128);
+		buf[2] = type;
 		buf[3] = this.m_ChatApp.capp_unused;
 
 		System.arraycopy(input, 0, buf, 4, length);
@@ -45,12 +44,9 @@ public class ChatAppLayer implements BaseLayer {
 	public boolean Send(byte[] input, int length) {
 		System.out.println("send_chatapp");
 		
-		this.m_ChatApp.capp_totlen[0] = (byte) (length % 256);
-		this.m_ChatApp.capp_totlen[1] = (byte) (length / 256);
-		
 		// No fragmentation
 		if (length <= 10) {
-			byte[] data = ObjToByte((byte) 0x00, input, length);
+			byte[] data = addHeader((byte) 0x00, input, length);
 			GetUnderLayer().Send(data, length+4);
 			return true;
 		}
@@ -60,21 +56,21 @@ public class ChatAppLayer implements BaseLayer {
 		byte[] fragment = new byte[10];
 		for (; i < length/10; i++) {
 			System.arraycopy(input, 10*i, fragment, 0, 10);
-			byte[] data = ObjToByte((byte) i, fragment, 10);
+			byte[] data = addHeader((byte) i, fragment, 10);
 			GetUnderLayer().Send(data, length+4);
 		}
 		
 		// Last fragment
 		if (length % 10 != 0) {			
 			System.arraycopy(input, 10*i, fragment, 0, 10);
-			byte[] data = ObjToByte((byte) i, fragment, length%10);
+			byte[] data = addHeader((byte) i, fragment, length%10);
 			GetUnderLayer().Send(data, length+4);
 		}
 		
 		return true;
 	}
 
-	public byte[] RemoveHeader(byte[] input, int length) {
+	public byte[] removeHeader(byte[] input, int length) {
 		byte[] data = new byte[length-4];
 		System.arraycopy(input, 4, data, 0, length-4);
 		return data;
@@ -82,9 +78,41 @@ public class ChatAppLayer implements BaseLayer {
 
 	public synchronized boolean Receive(byte[] input) {
 		System.out.println("Receive_chatapp");
-		byte[] data = RemoveHeader(input, input.length);
-		this.GetUpperLayer(0).Receive(data);
+		
+		// Not fragment
+		if (input[2] == (byte) 0x00) {			
+			byte[] data = removeHeader(input, input.length);
+			this.GetUpperLayer(0).Receive(data);
+			return true;
+		}
+		
+		// Buffer check, Insert fragment into buffer
+		if (this.m_ChatApp.data == null) {
+			this.m_ChatApp.capp_totlen[0] = input[0];
+			this.m_ChatApp.capp_totlen[1] = input[1];
+			this.m_ChatApp.data = new byte[128 * this.m_ChatApp.capp_totlen[1] + this.m_ChatApp.capp_totlen[0]];
+		}
+		byte[] fragment = removeHeader(input, input.length);
+		this.m_ChatApp.capp_type = input[2];
+		insertIntoBuffer(fragment);
+		if (isLastFragment(fragment.length)) {
+			this.GetUpperLayer(0).Receive(this.m_ChatApp.data);
+			this.m_ChatApp = new _CHAT_APP();
+		}
+		
 		return true;
+	}
+	
+	private void insertIntoBuffer(byte[] fragment) {
+		System.arraycopy(fragment, 0, this.m_ChatApp.data, 10*(this.m_ChatApp.capp_type-1), fragment.length);
+	}
+	
+	private boolean isLastFragment(int fragLength) {
+		int totlen = 10*(this.m_ChatApp.capp_type-1) + fragLength;
+		if (totlen == this.m_ChatApp.data.length) {			
+			return true;
+		}
+		return false;
 	}
 
 	@Override
