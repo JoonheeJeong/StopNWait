@@ -29,7 +29,7 @@ public class ChatAppLayer implements BaseLayer {
 		pLayerName = pName;
 	}
 
-	public byte[] ObjToByte(byte[] input, int length) {
+	public byte[] ObjToByte(byte type, byte[] input, int length) {
 		byte[] buf = new byte[length+4];
 		
 		buf[0] = this.m_ChatApp.capp_totlen[0];
@@ -48,8 +48,29 @@ public class ChatAppLayer implements BaseLayer {
 		this.m_ChatApp.capp_totlen[0] = (byte) (length % 256);
 		this.m_ChatApp.capp_totlen[1] = (byte) (length / 256);
 		
-		byte[] data = ObjToByte(input, length);
-		GetUnderLayer().Send(data, length+4);
+		// No fragmentation
+		if (length <= 10) {
+			byte[] data = ObjToByte((byte) 0x00, input, length);
+			GetUnderLayer().Send(data, length+4);
+			return true;
+		}
+		
+		// Loop fragmentation and send
+		int i = 0;
+		byte[] fragment = new byte[10];
+		for (; i < length/10; i++) {
+			System.arraycopy(input, 10*i, fragment, 0, 10);
+			byte[] data = ObjToByte((byte) i, fragment, 10);
+			GetUnderLayer().Send(data, length+4);
+		}
+		
+		// Last fragment
+		if (length % 10 != 0) {			
+			System.arraycopy(input, 10*i, fragment, 0, 10);
+			byte[] data = ObjToByte((byte) i, fragment, length%10);
+			GetUnderLayer().Send(data, length+4);
+		}
+		
 		return true;
 	}
 
