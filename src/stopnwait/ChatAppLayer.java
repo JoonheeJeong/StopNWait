@@ -8,6 +8,7 @@ public class ChatAppLayer implements BaseLayer {
 	public BaseLayer p_UnderLayer = null;
 	public ArrayList<BaseLayer> p_aUpperLayer = new ArrayList<BaseLayer>();
 	private _CHAT_APP m_ChatApp = new _CHAT_APP();
+	private int bufferCount = 0;
 
 	private class _CHAT_APP {
 		byte[] capp_totlen;
@@ -51,23 +52,27 @@ public class ChatAppLayer implements BaseLayer {
 			return true;
 		}
 		
-		// Loop fragmentation and send
-		int i = 1;
-		for (; i <= length/10; i++) {
-			byte[] fragment = new byte[10];
-			System.arraycopy(input, 10*(i-1), fragment, 0, 10);
-			byte[] data = addHeader((byte) i, fragment, length);
+		// First fragment
+		int i = 0;
+		byte[] fragment = new byte[10];
+		System.arraycopy(input, 0, fragment, 0, 10);
+		byte[] data = addHeader((byte) 0x01, fragment, length);
+		GetUnderLayer().Send(data, 14);
+		
+		// Middle fragments
+		int restLength = length-10;
+		for (i = 1; restLength > 10; i++) {
+			System.arraycopy(input, 10*i, fragment, 0, 10);
+			data = addHeader((byte) 0x02, fragment, length);
 			GetUnderLayer().Send(data, 14);
+			restLength -= 10;
 		}
 		
 		// Last fragment
-		int lastFragLength = length % 10;
-		if (lastFragLength != 0) {
-			byte[] lastFragment = new byte[lastFragLength];
-			System.arraycopy(input, 10*(i-1), lastFragment, 0, lastFragLength);
-			byte[] data = addHeader((byte) i, lastFragment, length);
-			GetUnderLayer().Send(data, lastFragLength+4);
-		}
+		fragment = new byte[restLength];
+		System.arraycopy(input, 10*i, fragment, 0, restLength);
+		data = addHeader((byte) 0x03, fragment, length);
+		GetUnderLayer().Send(data, restLength+4);
 		System.out.println("send_chatapp_end");
 		return true;
 	}
@@ -82,7 +87,7 @@ public class ChatAppLayer implements BaseLayer {
 		System.out.println("receive_chatapp_start");
 		
 		// Not fragment
-		if (input[2] == (byte) 0x00) {			
+		if (input[2] == this.m_ChatApp.capp_type) {			
 			byte[] data = removeHeader(input, input.length);
 			GetUpperLayer(0).Receive(data);
 			return true;
@@ -97,28 +102,20 @@ public class ChatAppLayer implements BaseLayer {
 		
 		// Insert fragment into buffer
 		byte[] fragment = removeHeader(input, input.length);
-		this.m_ChatApp.capp_type = input[2];
-		insertIntoBuffer(fragment);
-		if (isLastFragment(fragment.length)) {
+		System.arraycopy(fragment, 0, this.m_ChatApp.data, 10*this.bufferCount++, fragment.length);
+		if (input[2] == (byte) 0x03) {
+			if (this.m_ChatApp.data[this.m_ChatApp.data.length-1] == (byte) 0x00) {
+				System.out.println("Buffer Error");
+				return false;
+			}
 			GetUpperLayer(0).Receive(this.m_ChatApp.data);
 			this.m_ChatApp = new _CHAT_APP();
+			this.bufferCount = 0;
 		}
 		System.out.println("receive_chatapp_end");
 		return true;
 	}
 	
-	private void insertIntoBuffer(byte[] fragment) {
-		System.arraycopy(fragment, 0, this.m_ChatApp.data, 10*(this.m_ChatApp.capp_type-1), fragment.length);
-	}
-	
-	private boolean isLastFragment(int fragLength) {
-		int totlen = 10*(this.m_ChatApp.capp_type-1) + fragLength;
-		if (totlen == this.m_ChatApp.data.length) {			
-			return true;
-		}
-		return false;
-	}
-
 	@Override
 	public String GetLayerName() {
 		// TODO Auto-generated method stub

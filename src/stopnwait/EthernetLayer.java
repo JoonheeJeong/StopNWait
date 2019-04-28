@@ -8,6 +8,7 @@ public class EthernetLayer implements BaseLayer {
 	private BaseLayer p_UnderLayer = null;
 	private ArrayList<BaseLayer> p_aUpperLayer = new ArrayList<BaseLayer>();
 	_ETHERNET_FRAME m_Frame = new _ETHERNET_FRAME();
+	private boolean isSendible = true;
 
 	private class _ETHERNET_ADDR {
 		private byte[] addr = new byte[6];
@@ -69,11 +70,29 @@ public class EthernetLayer implements BaseLayer {
 		System.out.println("send_ethernet_start");
 		byte[] data = addHeader(input, length);
 		GetUnderLayer().Send(data, length+14);
+		this.isSendible = false;
+		/*
+		 * ACK이면 그냥 보내고
+		 * DATA이면  보낸 후 ChatAppLayer wait
+		 * */
+		synchronized(this) {
+			while (!isSendible) {
+				try {
+					wait();
+					Thread.sleep(50);
+				} catch (InterruptedException e) {}
+			}
+		}
 		System.out.println("send_ethernet_end");
 		return true;
 	}
 	
 	public byte[] removeHeader(byte[] input, int length) {
+		if (length == 60) { // 수신 패킷 최소 크기 60이기 때문에 garbage 값을 방지.
+			while (input[--length] == (byte) 0x00) 
+				;
+			++length;
+		}
 		byte[] data = new byte[length-14];
 		System.arraycopy(input, 14, data, 0, length-14);
 		return data;
@@ -82,6 +101,7 @@ public class EthernetLayer implements BaseLayer {
 	public synchronized boolean Receive(byte[] input) {
 		System.out.println("receive_ethernet_start");
 		if ( !(isBroadCast(input) || isCorrespondingAddress(input)) ) {
+			System.out.println("receive_ethernet_end");
 			return false;
 		}
 		TransmissionType transmissionType = getTransmissionType(input);
@@ -89,10 +109,15 @@ public class EthernetLayer implements BaseLayer {
 		case DATA:
 			byte[] data = removeHeader(input, input.length);
 			GetUpperLayer(0).Receive(data);
+			Send(new byte[0], 0); // ACK를 보냄
 			System.out.println("receive_ethernet_end");
 			return true;
 		case ACK:
-			GetUpperLayer(0).Send(new byte[0], 0);
+			/*
+			 * ChatAppLayer awake
+			 * */
+			this.isSendible = true;
+			notify();
 			System.out.println("receive_ethernet_end");
 			return true;
 		default: // DATA 타입과 ACK 타입이 아닌 경우: NONE (garbage)
