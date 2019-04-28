@@ -87,10 +87,10 @@ public class EthernetLayer implements BaseLayer {
 		switch (transmissionType) {
 		case DATA:
 			byte[] data = removeHeader(input, input.length);
-			this.GetUpperLayer(0).Receive(data);
+			GetUpperLayer(0).Receive(data);
 			return true;
 		case ACK:
-			this.GetUpperLayer(0).Send(new byte[0], 0);
+			GetUpperLayer(0).Send(new byte[0], 0);
 			return true;
 		case NONE:
 		default:

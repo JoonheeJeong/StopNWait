@@ -52,19 +52,21 @@ public class ChatAppLayer implements BaseLayer {
 		}
 		
 		// Loop fragmentation and send
-		int i = 0;
-		byte[] fragment = new byte[10];
-		for (; i < length/10; i++) {
-			System.arraycopy(input, 10*i, fragment, 0, 10);
+		int i = 1;
+		for (; i <= length/10; i++) {
+			byte[] fragment = new byte[10];
+			System.arraycopy(input, 10*(i-1), fragment, 0, 10);
 			byte[] data = addHeader((byte) i, fragment, 10);
-			GetUnderLayer().Send(data, length+4);
+			GetUnderLayer().Send(data, 14);
 		}
 		
 		// Last fragment
-		if (length % 10 != 0) {			
-			System.arraycopy(input, 10*i, fragment, 0, 10);
-			byte[] data = addHeader((byte) i, fragment, length%10);
-			GetUnderLayer().Send(data, length+4);
+		int lastFragLength = length % 10;
+		if (lastFragLength != 0) {
+			byte[] lastFragment = new byte[lastFragLength];
+			System.arraycopy(input, 10*(i-1), lastFragment, 0, lastFragLength);
+			byte[] data = addHeader((byte) i, lastFragment, lastFragLength);
+			GetUnderLayer().Send(data, lastFragLength+4);
 		}
 		
 		return true;
@@ -82,7 +84,7 @@ public class ChatAppLayer implements BaseLayer {
 		// Not fragment
 		if (input[2] == (byte) 0x00) {			
 			byte[] data = removeHeader(input, input.length);
-			this.GetUpperLayer(0).Receive(data);
+			GetUpperLayer(0).Receive(data);
 			return true;
 		}
 		
@@ -98,7 +100,7 @@ public class ChatAppLayer implements BaseLayer {
 		this.m_ChatApp.capp_type = input[2];
 		insertIntoBuffer(fragment);
 		if (isLastFragment(fragment.length)) {
-			this.GetUpperLayer(0).Receive(this.m_ChatApp.data);
+			GetUpperLayer(0).Receive(this.m_ChatApp.data);
 			this.m_ChatApp = new _CHAT_APP();
 		}
 		
