@@ -28,21 +28,21 @@ public class ChatAppLayer implements BaseLayer {
 		pLayerName = pName;
 	}
 
-	public byte[] addHeader(byte type, byte[] input, int length) {
-		byte[] buf = new byte[length+4];
+	public byte[] addHeader(byte type, byte[] input, int totlen) {
+		byte[] buf = new byte[input.length+4];
 		
-		buf[0] = (byte) (length % 128);
-		buf[1] = (byte) (length / 128);
+		buf[0] = (byte) (totlen % 128);
+		buf[1] = (byte) (totlen / 128);
 		buf[2] = type;
 		buf[3] = this.m_ChatApp.capp_unused;
 
-		System.arraycopy(input, 0, buf, 4, length);
+		System.arraycopy(input, 0, buf, 4, input.length);
 
 		return buf;
 	}
 
 	public boolean Send(byte[] input, int length) {
-		System.out.println("send_chatapp");
+		System.out.println("send_chatapp_start");
 		
 		// No fragmentation
 		if (length <= 10) {
@@ -56,7 +56,7 @@ public class ChatAppLayer implements BaseLayer {
 		for (; i <= length/10; i++) {
 			byte[] fragment = new byte[10];
 			System.arraycopy(input, 10*(i-1), fragment, 0, 10);
-			byte[] data = addHeader((byte) i, fragment, 10);
+			byte[] data = addHeader((byte) i, fragment, length);
 			GetUnderLayer().Send(data, 14);
 		}
 		
@@ -65,10 +65,10 @@ public class ChatAppLayer implements BaseLayer {
 		if (lastFragLength != 0) {
 			byte[] lastFragment = new byte[lastFragLength];
 			System.arraycopy(input, 10*(i-1), lastFragment, 0, lastFragLength);
-			byte[] data = addHeader((byte) i, lastFragment, lastFragLength);
+			byte[] data = addHeader((byte) i, lastFragment, length);
 			GetUnderLayer().Send(data, lastFragLength+4);
 		}
-		
+		System.out.println("send_chatapp_end");
 		return true;
 	}
 
@@ -79,7 +79,7 @@ public class ChatAppLayer implements BaseLayer {
 	}
 
 	public synchronized boolean Receive(byte[] input) {
-		System.out.println("Receive_chatapp");
+		System.out.println("receive_chatapp_start");
 		
 		// Not fragment
 		if (input[2] == (byte) 0x00) {			
@@ -103,7 +103,7 @@ public class ChatAppLayer implements BaseLayer {
 			GetUpperLayer(0).Receive(this.m_ChatApp.data);
 			this.m_ChatApp = new _CHAT_APP();
 		}
-		
+		System.out.println("receive_chatapp_end");
 		return true;
 	}
 	

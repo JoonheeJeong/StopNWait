@@ -66,9 +66,10 @@ public class EthernetLayer implements BaseLayer {
 	}
 	
 	public boolean Send(byte[] input, int length) {
-		System.out.println("send_ethernet");
+		System.out.println("send_ethernet_start");
 		byte[] data = addHeader(input, length);
 		GetUnderLayer().Send(data, length+14);
+		System.out.println("send_ethernet_end");
 		return true;
 	}
 	
@@ -79,7 +80,7 @@ public class EthernetLayer implements BaseLayer {
 	}
 
 	public synchronized boolean Receive(byte[] input) {
-		System.out.println("Receive_ethernet");
+		System.out.println("receive_ethernet_start");
 		if ( !(isBroadCast(input) || isCorrespondingAddress(input)) ) {
 			return false;
 		}
@@ -88,12 +89,14 @@ public class EthernetLayer implements BaseLayer {
 		case DATA:
 			byte[] data = removeHeader(input, input.length);
 			GetUpperLayer(0).Receive(data);
+			System.out.println("receive_ethernet_end");
 			return true;
 		case ACK:
 			GetUpperLayer(0).Send(new byte[0], 0);
+			System.out.println("receive_ethernet_end");
 			return true;
-		case NONE:
-		default:
+		default: // DATA 타입과 ACK 타입이 아닌 경우: NONE (garbage)
+			System.out.println("receive_ethernet_end");
 			return false;
 		}
 	}
