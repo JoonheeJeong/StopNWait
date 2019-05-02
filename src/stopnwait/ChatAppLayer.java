@@ -3,30 +3,32 @@ package stopnwait;
 import java.util.ArrayList;
 
 public class ChatAppLayer implements BaseLayer {
-	public int nUpperLayerCount = 0;
-	public String pLayerName = null;
-	public BaseLayer p_UnderLayer = null;
-	public ArrayList<BaseLayer> p_aUpperLayer = new ArrayList<BaseLayer>();
-	private _CHAT_APP m_ChatApp = new _CHAT_APP();
-	private int bufferCount = 0;
+	public int upperLayerCount = 0;
+	public String layerName = null;
+	public BaseLayer underLayer = null;
+	public ArrayList<BaseLayer> upperLayerList = new ArrayList<BaseLayer>();
+	
+	private ChatApp chatApp = new ChatApp();
+	private static final int FRAGMENTATION_SIZE = 10;
+	private int bufferCount;
 
-	private class _CHAT_APP {
-		byte[] capp_totlen;
-		byte capp_type;
-		byte capp_unused;
-		byte[] data;
+	private class ChatApp {
+		private byte[] totlen;
+		private byte type;
+		private byte unused;
+		private byte[] buffer;
 
-		public _CHAT_APP() {
-			this.capp_totlen = new byte[2];
-			this.capp_type = 0x00;
-			this.capp_unused = 0x00;
-			this.data = null;
+		public ChatApp() {
+			bufferCount = 0;
+			totlen = new byte[2];
+			type = 0x00;
+			unused = 0x00;
+			buffer = null;
 		}
 	}
 	
-	public ChatAppLayer(String pName) {
-		// TODO Auto-generated constructor stub
-		pLayerName = pName;
+	public ChatAppLayer(String layerName) {
+		this.layerName = layerName;
 	}
 
 	public byte[] addHeader(byte type, byte[] input, int totlen) {
@@ -35,130 +37,146 @@ public class ChatAppLayer implements BaseLayer {
 		buf[0] = (byte) (totlen % 128);
 		buf[1] = (byte) (totlen / 128);
 		buf[2] = type;
-		buf[3] = this.m_ChatApp.capp_unused;
+		buf[3] = this.chatApp.unused;
 
 		System.arraycopy(input, 0, buf, 4, input.length);
 
 		return buf;
 	}
 
-	public boolean Send(byte[] input, int length) {
+	public boolean send(byte[] input, int length) {
 		System.out.println("send_chatapp_start");
 		
+		int totlen = length;
+		
 		// No fragmentation
-		if (length <= 10) {
-			byte[] data = addHeader((byte) 0x00, input, length);
-			GetUnderLayer().Send(data, length+4);
+		if (totlen <= 10) {
+			byte[] data = addHeader((byte) 0x00, input, totlen);
+			getUnderLayer().send(data, totlen+4);
 			return true;
 		}
 		
 		// First fragment
-		int i = 0;
-		byte[] fragment = new byte[10];
-		System.arraycopy(input, 0, fragment, 0, 10);
-		byte[] data = addHeader((byte) 0x01, fragment, length);
-		GetUnderLayer().Send(data, 14);
+		int fragmentCount = 0;
+		byte[] rawFragment = fragmentation(input, fragmentCount, FRAGMENTATION_SIZE);
+		byte[] fragmentWithHeader = addHeader((byte) 0x01, rawFragment, totlen);
+		getUnderLayer().send(fragmentWithHeader, 14);
 		
 		// Middle fragments
-		int restLength = length-10;
-		for (i = 1; restLength > 10; i++) {
-			System.arraycopy(input, 10*i, fragment, 0, 10);
-			data = addHeader((byte) 0x02, fragment, length);
-			GetUnderLayer().Send(data, 14);
-			restLength -= 10;
+		int theRestOfLength = totlen-10;
+		while (theRestOfLength > 10) {
+			rawFragment = fragmentation(input, ++fragmentCount, FRAGMENTATION_SIZE);
+			fragmentWithHeader = addHeader((byte) 0x02, rawFragment, totlen);
+			getUnderLayer().send(fragmentWithHeader, 14);
+			theRestOfLength -= 10;
 		}
 		
 		// Last fragment
-		fragment = new byte[restLength];
-		System.arraycopy(input, 10*i, fragment, 0, restLength);
-		data = addHeader((byte) 0x03, fragment, length);
-		GetUnderLayer().Send(data, restLength+4);
+		rawFragment = fragmentation(input, ++fragmentCount, theRestOfLength);
+		fragmentWithHeader = addHeader((byte) 0x03, rawFragment, length);
+		getUnderLayer().send(fragmentWithHeader, theRestOfLength+4);
 		System.out.println("send_chatapp_end");
 		return true;
 	}
 
-	public byte[] removeHeader(byte[] input, int length) {
+	private byte[] fragmentation(byte[] input, int fragmentCount, int fragmentationSize) {
+		byte[] rawFragment = new byte[fragmentationSize];
+		System.arraycopy(input, fragmentCount*FRAGMENTATION_SIZE, rawFragment, 0, fragmentationSize);
+		return rawFragment;
+	}
+	
+	private byte[] removeHeader(byte[] input, int length) {
 		byte[] data = new byte[length-4];
 		System.arraycopy(input, 4, data, 0, length-4);
 		return data;
 	}
 
-	public synchronized boolean Receive(byte[] input) {
+	public synchronized boolean receive(byte[] input) {
 		System.out.println("receive_chatapp_start");
 		
 		// Not fragment
-		if (input[2] == this.m_ChatApp.capp_type) {			
+		if (input[2] == this.chatApp.type) {			
 			byte[] data = removeHeader(input, input.length);
-			GetUpperLayer(0).Receive(data);
+			getUpperLayer(0).receive(data);
 			return true;
 		}
 		
 		// Buffer check
-		if (this.m_ChatApp.data == null) {
-			this.m_ChatApp.capp_totlen[0] = input[0];
-			this.m_ChatApp.capp_totlen[1] = input[1];
-			this.m_ChatApp.data = new byte[128 * this.m_ChatApp.capp_totlen[1] + this.m_ChatApp.capp_totlen[0]];
+		if (input[2] == (byte) 0x01) {
+			this.chatApp.totlen[0] = input[0];
+			this.chatApp.totlen[1] = input[1];
+			int realTotalLength = 128 * this.chatApp.totlen[1] + this.chatApp.totlen[0];
+			this.chatApp.buffer = new byte[realTotalLength];
 		}
 		
 		// Insert fragment into buffer
 		byte[] fragment = removeHeader(input, input.length);
-		System.arraycopy(fragment, 0, this.m_ChatApp.data, 10*this.bufferCount++, fragment.length);
+		insertIntoBuffer(fragment);
+		
+		// Upper Layer receive full message when the last fragment come in
 		if (input[2] == (byte) 0x03) {
-			if (this.m_ChatApp.data[this.m_ChatApp.data.length-1] == (byte) 0x00) {
-				System.out.println("Buffer Error");
+			if (!isAllDataInBuffer(fragment.length)) {
+				System.out.println("[Error] Any data is not arrived.");
+				System.out.println("receive_chatapp_end");
 				return false;
 			}
-			GetUpperLayer(0).Receive(this.m_ChatApp.data);
-			this.m_ChatApp = new _CHAT_APP();
-			this.bufferCount = 0;
+			getUpperLayer(0).receive(this.chatApp.buffer);
+			this.chatApp = new ChatApp();
 		}
+		
 		System.out.println("receive_chatapp_end");
 		return true;
 	}
 	
+	private void insertIntoBuffer(byte[] fragment) {
+		System.arraycopy(fragment, 0, this.chatApp.buffer, FRAGMENTATION_SIZE*bufferCount++, fragment.length);
+	}
+	
+	private boolean isAllDataInBuffer(int lastFragmentSize) {
+		int totlen = 128 * this.chatApp.totlen[1] + this.chatApp.totlen[0];
+		int totalDataSizeInBuffer = (bufferCount - 1) * FRAGMENTATION_SIZE + lastFragmentSize;
+		if (totlen == totalDataSizeInBuffer)
+			return true;
+		return false;
+	}
+	
 	@Override
-	public String GetLayerName() {
-		// TODO Auto-generated method stub
-		return pLayerName;
+	public String getLayerName() {
+		return layerName;
 	}
 
 	@Override
-	public BaseLayer GetUnderLayer() {
-		// TODO Auto-generated method stub
-		if (p_UnderLayer == null)
+	public BaseLayer getUnderLayer() {
+		if (underLayer == null)
 			return null;
-		return p_UnderLayer;
+		return underLayer;
 	}
 
 	@Override
-	public BaseLayer GetUpperLayer(int nindex) {
-		// TODO Auto-generated method stub
-		if (nindex < 0 || nindex > nUpperLayerCount || nUpperLayerCount < 0)
+	public BaseLayer getUpperLayer(int index) {
+		if (index < 0 || index > upperLayerCount || upperLayerCount < 0)
 			return null;
-		return p_aUpperLayer.get(nindex);
+		return upperLayerList.get(index);
 	}
 
 	@Override
-	public void SetUnderLayer(BaseLayer pUnderLayer) {
-		// TODO Auto-generated method stub
-		if (pUnderLayer == null)
+	public void setUnderLayer(BaseLayer underLayer) {
+		if (underLayer == null)
 			return;
-		this.p_UnderLayer = pUnderLayer;
+		this.underLayer = underLayer;
 	}
 
 	@Override
-	public void SetUpperLayer(BaseLayer pUpperLayer) {
-		// TODO Auto-generated method stub
-		if (pUpperLayer == null)
+	public void setUpperLayer(BaseLayer upperLayer) {
+		if (upperLayer == null)
 			return;
-		this.p_aUpperLayer.add(nUpperLayerCount++, pUpperLayer);
-
+		this.upperLayerList.add(upperLayerCount++, upperLayer);
 	}
 
 	@Override
-	public void SetUpperUnderLayer(BaseLayer pUULayer) {
-		this.SetUpperLayer(pUULayer);
-		pUULayer.SetUnderLayer(this);
+	public void setUpperUnderLayer(BaseLayer layer) {
+		this.setUpperLayer(layer);
+		layer.setUnderLayer(this);
 	}
 
 }

@@ -3,40 +3,39 @@ package stopnwait;
 import java.util.ArrayList;
 
 interface BaseLayer {
-	public final int m_nUpperLayerCount = 0;
-	public final String m_pLayerName = null;
-	public final BaseLayer mp_UnderLayer = null;
-	public final ArrayList<BaseLayer> mp_aUpperLayer = new ArrayList<BaseLayer>();
+	public final int upperLayerCount = 0;
+	public final String pLayerName = null;
+	public final BaseLayer underLayer = null;
+	public final ArrayList<BaseLayer> upperLayerList = new ArrayList<BaseLayer>();
 
-	public String GetLayerName();
+	public String getLayerName();
 
-	public BaseLayer GetUnderLayer();
+	public BaseLayer getUnderLayer();
 
-	public BaseLayer GetUpperLayer(int nindex);
+	public BaseLayer getUpperLayer(int index);
 
-	public void SetUnderLayer(BaseLayer pUnderLayer);
+	public void setUnderLayer(BaseLayer underLayer);
 
-	public void SetUpperLayer(BaseLayer pUpperLayer);
+	public void setUpperLayer(BaseLayer upperLayer);
 
-	public default void SetUnderUpperLayer(BaseLayer pUULayer) {
+	public default void setUnderUpperLayer(BaseLayer layer) {
 	}
 
-	public void SetUpperUnderLayer(BaseLayer pUULayer);
+	public void setUpperUnderLayer(BaseLayer layer);
 
-	public default boolean Send(byte[] input, int length) {
+	public default boolean send(byte[] input, int length) {
 		return false;
 	}
 
-	public default boolean Send(String filename) {
+	public default boolean send(String filename) {
 		return false;
 	}
 
-	public default boolean Receive(byte[] input) {
+	public default boolean receive(byte[] input) {
 		return false;
 	}
 
-	public default boolean Receive() {
+	public default boolean receive() {
 		return false;
 	}
-
 }

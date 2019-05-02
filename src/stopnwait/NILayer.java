@@ -10,21 +10,21 @@ import org.jnetpcap.packet.PcapPacket;
 import org.jnetpcap.packet.PcapPacketHandler;
 
 public class NILayer implements BaseLayer {
-	public int nUpperLayerCount = 0;
-	public String pLayerName = null;
-	public BaseLayer p_UnderLayer = null;
-	public ArrayList<BaseLayer> p_aUpperLayer = new ArrayList<BaseLayer>();
+	public int upperLayerCount = 0;
+	public String layerName = null;
+	public BaseLayer underLayer = null;
+	public ArrayList<BaseLayer> upperLayerList = new ArrayList<BaseLayer>();
 
-	int m_iNumAdapter;
-	public Pcap m_AdapterObject;
+	int adapterCount;
+	public Pcap adapterObject;
 	public PcapIf device;
-	public List<PcapIf> m_pAdapterList;
+	public List<PcapIf> adapterList;
 	StringBuilder errbuf = new StringBuilder();
 
-	public NILayer(String pName) {
-		pLayerName = pName;
-		m_pAdapterList = new ArrayList<PcapIf>();
-		m_iNumAdapter = 0;
+	public NILayer(String layerName) {
+		this.layerName = layerName;
+		adapterList = new ArrayList<PcapIf>();
+		adapterCount = 0;
 		SetAdapterList();
 	}
 	
@@ -32,8 +32,8 @@ public class NILayer implements BaseLayer {
 		int snaplen = 64 * 1024;
 		int flags = Pcap.MODE_PROMISCUOUS;
 		int timeout = 10 * 1000;
-		this.m_AdapterObject = Pcap.openLive(
-			m_pAdapterList.get(m_iNumAdapter).getName(),
+		this.adapterObject = Pcap.openLive(
+			adapterList.get(adapterCount).getName(),
 			snaplen, 
 			flags, 
 			timeout, 
@@ -41,32 +41,32 @@ public class NILayer implements BaseLayer {
 		);
 	}
 	
-	public void SetAdapterNumber(int iNum) {
-		this.m_iNumAdapter = iNum;
+	public void SetAdapterNumber(int num) {
+		this.adapterCount = num;
 		PacketStartDriver();
-		Receive();
+		receive();
 	}
 	
 	public void SetAdapterList() {
-		int r = Pcap.findAllDevs(m_pAdapterList, errbuf);
-		if (r == Pcap.NOT_OK || m_pAdapterList.isEmpty()) {
+		int r = Pcap.findAllDevs(adapterList, errbuf);
+		if (r == Pcap.NOT_OK || adapterList.isEmpty()) {
 			System.err.printf("Can't read list of devices, error is %s", errbuf.toString());
 			return;
 		}
 	}
 	
-	public boolean Send(byte[] input, int length) {
+	public boolean send(byte[] input, int length) {
 		System.out.println("send_nil");
 		ByteBuffer buf = ByteBuffer.wrap(input);
-		if (m_AdapterObject.sendPacket(buf) != Pcap.OK) {
-			System.err.println(m_AdapterObject.getErr());
+		if (adapterObject.sendPacket(buf) != Pcap.OK) {
+			System.err.println(adapterObject.getErr());
 			return false;
 		}
 		return true;
 	}
 
-	public boolean Receive() {
-		Receive_Thread thread = new Receive_Thread(m_AdapterObject, this.GetUpperLayer(0));
+	public boolean receive() {
+		ReceiveThread thread = new ReceiveThread(adapterObject, this.getUpperLayer(0));
 		Thread obj = new Thread(thread);
 		obj.start();
 
@@ -74,74 +74,68 @@ public class NILayer implements BaseLayer {
 	}
 
 	@Override
-	public void SetUnderLayer(BaseLayer pUnderLayer) {
-		// TODO Auto-generated method stub
-		if (pUnderLayer == null)
+	public void setUnderLayer(BaseLayer underLayer) {
+		if (underLayer == null)
 			return;
-		p_UnderLayer = pUnderLayer;
+		this.underLayer = underLayer;
 	}
 
 	@Override
-	public void SetUpperLayer(BaseLayer pUpperLayer) {
-		// TODO Auto-generated method stub
-		if (pUpperLayer == null)
+	public void setUpperLayer(BaseLayer upperLayer) {
+		if (upperLayer == null)
 			return;
-		this.p_aUpperLayer.add(nUpperLayerCount++, pUpperLayer);
-		// nUpperLayerCount++;
+		this.upperLayerList.add(upperLayerCount++, upperLayer);
 	}
 
 	@Override
-	public String GetLayerName() {
-		// TODO Auto-generated method stub
-		return pLayerName;
+	public String getLayerName() {
+		return layerName;
 	}
 
 	@Override
-	public BaseLayer GetUnderLayer() {
-		if (p_UnderLayer == null)
+	public BaseLayer getUnderLayer() {
+		if (underLayer == null)
 			return null;
-		return p_UnderLayer;
+		return underLayer;
 	}
 
 	@Override
-	public BaseLayer GetUpperLayer(int nindex) {
-		// TODO Auto-generated method stub
-		if (nindex < 0 || nindex > nUpperLayerCount || nUpperLayerCount < 0)
+	public BaseLayer getUpperLayer(int index) {
+		if (index < 0 || index > upperLayerCount || upperLayerCount < 0)
 			return null;
-		return p_aUpperLayer.get(nindex);
+		return upperLayerList.get(index);
 	}
 
 	@Override
-	public void SetUpperUnderLayer(BaseLayer pUULayer) {
-		this.SetUpperLayer(pUULayer);
-		pUULayer.SetUnderLayer(this);
+	public void setUpperUnderLayer(BaseLayer layer) {
+		this.setUpperLayer(layer);
+		layer.setUnderLayer(this);
 	}
 
 }
 
-class Receive_Thread implements Runnable {
+class ReceiveThread implements Runnable {
 	byte[] data;
-	Pcap AdapterObject;
-	BaseLayer UpperLayer;
+	Pcap adapterObject;
+	BaseLayer upperLayer;
 
-	public Receive_Thread(Pcap m_AdapterObject, BaseLayer m_UpperLayer) {
-		// TODO Auto-generated constructor stub
-		AdapterObject = m_AdapterObject;
-		UpperLayer = m_UpperLayer;
+	public ReceiveThread(Pcap adapterObject, BaseLayer upperLayer) {
+		this.adapterObject = adapterObject;
+		this.upperLayer = upperLayer;
 	}
 
 	@Override
 	public void run() {
 		while (true) {
-			PcapPacketHandler<String> jpacketHandler = new PcapPacketHandler<String>() {
+			PcapPacketHandler<String> jPacketHandler = new PcapPacketHandler<String>() {
 				public void nextPacket(PcapPacket packet, String user) {
 					data = packet.getByteArray(0, packet.size());
 					System.out.println("Receive_nil");
-					UpperLayer.Receive(data);
+					upperLayer.receive(data);
 				}
 			};
 			
-			AdapterObject.loop(1000, jpacketHandler, "");
+			adapterObject.loop(1000, jPacketHandler, "");
 		}
 	}
 

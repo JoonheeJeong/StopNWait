@@ -6,131 +6,124 @@ import java.util.StringTokenizer;
 
 public class LayerManager {
 	
-	private class _NODE{
+	private class Node{
 		private String token;
-		private _NODE next;
-		public _NODE(String input){
+		private Node next;
+		public Node(String input){
 			this.token = input;
 			this.next = null;
 		}
 	}
 
-	_NODE mp_sListHead;
-	_NODE mp_sListTail;
+	private Node listHead;
+	private Node listTail;
 	
-	private int m_nTop;
-	private int m_nLayerCount;
+	private int topIndex;
+	private int layerCount;
 
-	private ArrayList<BaseLayer> mp_Stack = new ArrayList<BaseLayer>();
-	private ArrayList<BaseLayer> mp_aLayers = new ArrayList<BaseLayer>() ;
+	private ArrayList<BaseLayer> stack = new ArrayList<BaseLayer>();
+	private ArrayList<BaseLayer> layerlist = new ArrayList<BaseLayer>() ;
 	
 
 	public LayerManager(){
-		m_nLayerCount = 0;
-		mp_sListHead = null;
-		mp_sListTail = null;
-		m_nTop = -1;
+		layerCount = 0;
+		listHead = null;
+		listTail = null;
+		topIndex = -1;
 	}
 	
-	public void AddLayer(BaseLayer pLayer){
-		mp_aLayers.add(m_nLayerCount++, pLayer);
-		//m_nLayerCount++;
+	public void AddLayer(BaseLayer layer){
+		layerlist.add(layerCount++, layer);
 	}
 	
 	
-	public BaseLayer GetLayer(int nindex){
-		return mp_aLayers.get(nindex);
+	public BaseLayer GetLayer(int index){
+		return layerlist.get(index);
 	}
 	
-	public BaseLayer GetLayer(String pName){
-		for( int i=0; i < m_nLayerCount; i++){
-			if(pName.compareTo(mp_aLayers.get(i).GetLayerName()) == 0)
-				return mp_aLayers.get(i);
+	public BaseLayer GetLayer(String name){
+		for( int i=0; i < layerCount; i++){
+			if(name.compareTo(layerlist.get(i).getLayerName()) == 0)
+				return layerlist.get(i);
 		}
 		return null;
 	}
 	
 	public void ConnectLayers(String pcList){
 		MakeList(pcList);
-		LinkLayer(mp_sListHead);		
+		LinkLayer(listHead);		
 	}
 
 	private void MakeList(String pcList){
 		StringTokenizer tokens = new StringTokenizer(pcList, " ");
 		
 		for(; tokens.hasMoreElements();){
-			_NODE pNode = AllocNode(tokens.nextToken());
+			Node pNode = AllocNode(tokens.nextToken());
 			AddNode(pNode);
-			
 		}	
 	}
 
-	private _NODE AllocNode(String pcName){
-		_NODE node = new _NODE(pcName);
-				
+	private Node AllocNode(String pcName){
+		Node node = new Node(pcName);
 		return node;				
 	}
 	
-	private void AddNode(_NODE pNode){
-		if(mp_sListHead == null){
-			mp_sListHead = mp_sListTail = pNode;
+	private void AddNode(Node node){
+		if(listHead == null){
+			listHead = listTail = node;
 		}else{
-			mp_sListTail.next = pNode;
-			mp_sListTail = pNode;
+			listTail.next = node;
+			listTail = node;
 		}
 	}
 
-	private void Push (BaseLayer pLayer){
-		mp_Stack.add(++m_nTop, pLayer);
+	private void Push (BaseLayer layer){
+		stack.add(++topIndex, layer);
 	}
 
 	private BaseLayer Pop(){
-		BaseLayer pLayer = mp_Stack.get(m_nTop);
-		mp_Stack.remove(m_nTop);
-		m_nTop--;
+		BaseLayer layer = stack.get(topIndex);
+		stack.remove(topIndex);
+		topIndex--;
 		
-		return pLayer;
+		return layer;
 	}
 	
 	private BaseLayer Top(){
-		return mp_Stack.get(m_nTop);
+		return stack.get(topIndex);
 	}
 	
-	private void LinkLayer(_NODE pNode){
-		BaseLayer pLayer = null;
+	private void LinkLayer(Node node){
+		BaseLayer layer = null;
 		
-		while(pNode != null){
-			if( pLayer == null)
-				pLayer = GetLayer (pNode.token);
+		while(node != null){
+			if( layer == null)
+				layer = GetLayer (node.token);
 			else{
-				if(pNode.token.equals("("))
-					Push (pLayer);
-				else if(pNode.token.equals(")"))
+				if(node.token.equals("("))
+					Push (layer);
+				else if(node.token.equals(")"))
 					Pop();
 				else{
-					char cMode = pNode.token.charAt(0);
-					String pcName = pNode.token.substring(1, pNode.token.length());
+					char cMode = node.token.charAt(0);
+					String pcName = node.token.substring(1, node.token.length());
 					
-					pLayer = GetLayer (pcName);
+					layer = GetLayer (pcName);
 					
 					switch(cMode){
 					case '*':
-						Top().SetUpperUnderLayer( pLayer );
+						Top().setUpperUnderLayer( layer );
 						break;
 					case '+':
-						Top().SetUpperLayer( pLayer );
+						Top().setUpperLayer( layer );
 						break;
 					case '-':
-						Top().SetUnderLayer( pLayer );
+						Top().setUnderLayer( layer );
 						break;
 					}					
 				}
 			}
-			
-			pNode = pNode.next;
-				
+			node = node.next;
 		}
 	}
-	
-	
 }
